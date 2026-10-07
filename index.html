@@ -116,10 +116,13 @@
       margin-bottom: 1.5rem; 
       font-weight: 700; 
       border: 3px solid #e2e8f0;
+      gap: 0.5rem;
+      flex-wrap: wrap;
     }
 
-    .badge-score { background: #fef08a; color: #854d0e; padding: 0.5rem 1.2rem; border-radius: 20px; font-size: 1.1rem; box-shadow: 0 4px 0 #eab308; }
-    .timer { font-size: 1.3rem; color: #fff; background: var(--success); padding: 0.5rem 1.2rem; border-radius: 20px; box-shadow: 0 4px 0 #059669; transition: background 0.3s; }
+    .badge-score { background: #fef08a; color: #854d0e; padding: 0.5rem 1rem; border-radius: 20px; font-size: 1.1rem; box-shadow: 0 4px 0 #eab308; }
+    .badge-lives { background: #ffe4e6; color: #be123c; padding: 0.5rem 1rem; border-radius: 20px; font-size: 1.1rem; box-shadow: 0 4px 0 #f43f5e; }
+    .timer { font-size: 1.1rem; color: #fff; background: var(--success); padding: 0.5rem 1rem; border-radius: 20px; box-shadow: 0 4px 0 #059669; transition: background 0.3s; }
     .timer.warning { background: var(--danger); box-shadow: 0 4px 0 #b91c1c; animation: pulse-red 0.5s infinite alternate; }
     @keyframes pulse-red { from { transform: scale(1); } to { transform: scale(1.1); } }
 
@@ -165,10 +168,11 @@
 <body>
 
   <div class="container">
+    <!-- START SCREEN -->
     <div id="start-screen" class="card">
       <div class="mascot">🦉</div>
       <h1>Rounding Challenge</h1>
-      <p class="subtitle">Time Limit: <strong>20s per question</strong> | Target: <strong>15 Marks</strong></p>
+      <p class="subtitle">Time Limit: <strong>20s / Q</strong> | Target: <strong>15 Stars</strong> | Lives: <strong>3 ❤️</strong></p>
       <form id="start-form">
         <div class="form-row">
           <div class="form-group">
@@ -188,10 +192,12 @@
       </form>
     </div>
 
+    <!-- PRACTICE SCREEN -->
     <div id="practice-screen" class="card hidden">
       <div class="mascot">🤖</div>
       <div class="stats-bar">
-        <div style="font-size: 1.2rem;">👤 <span id="display-info" style="color: var(--primary-dark);"></span></div>
+        <div style="font-size: 1.1rem;">👤 <span id="display-info" style="color: var(--primary-dark);"></span></div>
+        <div class="badge-lives"><span id="lives-display">❤️❤️❤️</span></div>
         <div class="badge-score">⭐ <span id="current-score">0</span> / 15</div>
         <div id="timer-box" class="timer">⏱️ <span id="timer-count">20</span>s</div>
       </div>
@@ -200,7 +206,6 @@
 
       <form id="answer-form">
         <div class="form-group">
-          <!-- Changed to type="text" to prevent browsers from deleting trailing zeros like .10 -->
           <input type="text" inputmode="decimal" pattern="[0-9.-]*" id="math-input" placeholder="Enter exact answer..." required autocomplete="off">
         </div>
         <button type="submit" class="btn-submit">Submit ✅</button>
@@ -208,6 +213,15 @@
       <div id="feedback-message" class="feedback hidden"></div>
     </div>
 
+    <!-- GAME OVER SCREEN -->
+    <div id="game-over-screen" class="card hidden" style="text-align: center;">
+      <div class="mascot">💔</div>
+      <h1 style="color: var(--danger); font-size: 2.8rem;">Game Over!</h1>
+      <p class="subtitle" style="font-size: 1.3rem;">You ran out of lives! Don't give up, try again.</p>
+      <button onclick="restartChallenge()" class="btn-submit" style="margin-top: 1rem; max-width: 300px; background: var(--secondary); box-shadow: 0 8px 0 var(--secondary-dark);">Redo Challenge 🔄</button>
+    </div>
+
+    <!-- END (VICTORY) SCREEN -->
     <div id="end-screen" class="card hidden" style="text-align: center;">
       <div class="mascot" style="animation: bounce 1s infinite;">🏆</div>
       <h1 style="color: #ea580c; font-size: 2.8rem;">You Did It!</h1>
@@ -222,24 +236,35 @@
   </div>
 
   <script>
-    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzoMGuLMQByS3tbMdXcOAnMu9RihNom8FuJWBISd3EgOH2fHqfitmL6eF6C5hEshyGC/exec";
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxIjhJ5v22Vj5C6PUkKaCluTevk4VPWYlDooZyuw1Vd_UAjT5Wodl-Jd8sMFYeV3brVDA/exec";
 
     const TARGET_SCORE = 15;
     const QUESTION_TIME_LIMIT = 20;
+    const INITIAL_LIVES = 3;
     
     let studentClass = "", classNumber = "", studentName = "";
-    let score = 0, totalAttempts = 0;
+    let score = 0, lives = INITIAL_LIVES, totalAttempts = 0;
     let timerInterval = null, totalTimerInterval = null;
     let timeLeft = QUESTION_TIME_LIMIT, totalSecondsUsed = 0;
-    let currentExpectedAnswer = ""; // Changed to string to enforce trailing zeros
+    let currentExpectedAnswer = "";
 
     const startScreen = document.getElementById('start-screen');
     const practiceScreen = document.getElementById('practice-screen');
+    const gameOverScreen = document.getElementById('game-over-screen');
     const endScreen = document.getElementById('end-screen');
     const questionDisplay = document.getElementById('question-display');
     const feedbackEl = document.getElementById('feedback-message');
     const mathInput = document.getElementById('math-input');
     const timerBox = document.getElementById('timer-box');
+    const livesDisplay = document.getElementById('lives-display');
+
+    function updateLivesDisplay() {
+      if (lives > 0) {
+        livesDisplay.textContent = '❤️'.repeat(lives);
+      } else {
+        livesDisplay.textContent = '💔';
+      }
+    }
 
     function throwConfetti() {
       const colors = ['#8b5cf6', '#f43f5e', '#10b981', '#f59e0b', '#3b82f6'];
@@ -347,7 +372,7 @@
 
       let questionText = "";
       let answerMath = 0;
-      let answerFormatted = ""; // Used for strict string comparison
+      let answerFormatted = ""; 
 
       if (targetType === 'integer') {
         questionText = `Round ${action} ${numStr} to the nearest integer.`;
@@ -368,7 +393,6 @@
         const plural = dpCount > 1 ? 'places' : 'place';
         questionText = `Round ${action} ${numStr} to ${dpCount} decimal ${plural}.`;
         answerMath = exactRound(num, action, dpCount);
-        // FORCE trailing zeros (e.g. 5.10 instead of 5.1)
         answerFormatted = answerMath.toFixed(dpCount);
       }
       else if (targetType === 'sf') {
@@ -378,7 +402,6 @@
         const exponent = sfCount - 1 - magnitude;
         answerMath = exactRound(num, action, exponent);
         
-        // FORCE trailing zeros for sig figs if needed
         if (exponent > 0) {
           answerFormatted = answerMath.toFixed(exponent);
         } else {
@@ -405,7 +428,7 @@
         if (timeLeft <= 0) {
           clearInterval(timerInterval);
           timerBox.classList.remove('warning');
-          processAnswer(false, `⏰ Time's up! Answer: ${currentExpectedAnswer}`);
+          processAnswer(false, `⏰ Time's up! Answer was: ${currentExpectedAnswer}`);
         }
       }, 1000);
     }
@@ -427,11 +450,13 @@
       let isCorrect = false;
 
       if (!isUserSubmit) {
+        // Time out -> Lose 1 life
+        lives--;
+        updateLivesDisplay();
         practiceScreen.classList.add('shake');
         feedbackEl.className = "feedback incorrect";
-        feedbackEl.textContent = timeoutMessage;
+        feedbackEl.textContent = timeoutMessage + " (-1 ❤️)";
       } else {
-        // Evaluate purely as a string to mandate trailing zeros
         const userVal = mathInput.value.trim();
         if (userVal === currentExpectedAnswer) {
           isCorrect = true;
@@ -440,17 +465,24 @@
           feedbackEl.className = "feedback correct";
           feedbackEl.innerHTML = "✨ Awesome! +1 Star ⭐";
         } else {
+          // Wrong Answer -> Lose 1 life
+          lives--;
+          updateLivesDisplay();
           practiceScreen.classList.add('shake');
           feedbackEl.className = "feedback incorrect";
-          feedbackEl.textContent = `Oops! ❌ Exact format required: ${currentExpectedAnswer}`;
+          feedbackEl.textContent = `Oops! Exact format required: ${currentExpectedAnswer} (-1 ❤️)`;
         }
       }
 
-      if (score >= TARGET_SCORE) {
+      // Check for Victory or Game Over
+      if (isCorrect && score >= TARGET_SCORE) {
         clearInterval(totalTimerInterval);
         setTimeout(() => { showEndScreen(); saveRecord(); throwConfetti(); }, 1500);
+      } else if (lives <= 0) {
+        clearInterval(totalTimerInterval);
+        setTimeout(showGameOverScreen, 2000);
       } else {
-        const delay = isCorrect ? 1500 : 5000;
+        const delay = isCorrect ? 1500 : 3000;
         setTimeout(nextQuestion, delay);
       }
     }
@@ -465,6 +497,26 @@
       startQuestionTimer();
     }
 
+    function showGameOverScreen() {
+      practiceScreen.classList.add('hidden');
+      gameOverScreen.classList.remove('hidden');
+    }
+
+    function restartChallenge() {
+      gameOverScreen.classList.add('hidden');
+      practiceScreen.classList.remove('hidden');
+      
+      score = 0;
+      lives = INITIAL_LIVES;
+      totalAttempts = 0;
+      
+      updateLivesDisplay();
+      document.getElementById('current-score').textContent = score;
+      
+      startTotalTimer();
+      nextQuestion();
+    }
+
     function saveRecord() {
       const recordPayload = {
         className: studentClass,
@@ -477,7 +529,7 @@
 
       const syncStatusEl = document.getElementById('sync-status');
       
-      if (GOOGLE_SCRIPT_URL && GOOGLE_SCRIPT_URL !== "YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE") {
+      if (GOOGLE_SCRIPT_URL && GOOGLE_SCRIPT_URL !== "https://script.google.com/macros/s/AKfycbzoMGuLMQByS3tbMdXcOAnMu9RihNom8FuJWBISd3EgOH2fHqfitmL6eF6C5hEshyGC/exec") {
         fetch(GOOGLE_SCRIPT_URL, {
           method: 'POST',
           mode: 'no-cors',
@@ -520,8 +572,12 @@
       practiceScreen.classList.remove('hidden');
       
       score = 0;
+      lives = INITIAL_LIVES;
       totalAttempts = 0;
+      
+      updateLivesDisplay();
       document.getElementById('current-score').textContent = score;
+      
       startTotalTimer();
       nextQuestion();
     });
@@ -533,5 +589,7 @@
       }
     });
   </script>
+</body>
+</html>
 </body>
 </html>
